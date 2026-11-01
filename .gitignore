@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 生成的 Word 文档
+*.docx
+~$*.docx
+
+# 编辑器与系统
+.idea/
+.DS_Store
+Thumbs.db
