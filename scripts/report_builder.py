@@ -59,7 +59,11 @@ class ReportBuilder:
         self.config = config
         self.source_path = Path(source_path).resolve()
         self.source_dir = self.source_path.parent
-        self.caption_patterns = [re.compile(p) for p in config['captions']['patterns']]
+        captions = config['captions']
+        # patterns 是旧配置里的通用列表，图和表都并入，保证老配置照旧可用。
+        legacy = captions['patterns']
+        self.figure_captions = [re.compile(p) for p in captions['figure_patterns'] + legacy]
+        self.table_captions = [re.compile(p) for p in captions['table_patterns'] + legacy]
         self.reference_pattern = re.compile(config['references']['pattern'])
         self.number_pattern = re.compile(config['lists']['number_pattern'])
         self.code_languages = []
@@ -152,12 +156,30 @@ class ReportBuilder:
                 return True
         return False
 
-    def is_caption(self, text):
-        if not any(pattern.match(text) for pattern in self.caption_patterns):
-            return False
-        if self.config['captions']['require_preceding_image']:
-            return self.previous_has_drawing()
-        return True
+    def next_starts_table(self, lines, index):
+        """这一行之后（跳过空行）的第一个非空行是不是表格。"""
+        following = index + 1
+        while following < len(lines) and not lines[following].strip():
+            following += 1
+        return following < len(lines) and lines[following].strip().startswith('|')
+
+    def caption_kind(self, lines, index):
+        """判断这一行是不是题注，返回 'figure' / 'table' / None。
+
+        图题注写在图片下面，表题注写在表格上面。题注必须贴着图或表——正文里
+        出现的「图 3-1」「表 3-1」正是靠这一条才不会被误判成题注。
+        """
+        text = lines[index].strip()
+        captions = self.config['captions']
+        after_image = self.previous_has_drawing()
+        before_table = self.next_starts_table(lines, index)
+        if (any(pattern.match(text) for pattern in self.figure_captions)
+                and (after_image or not captions['require_preceding_image'])):
+            return 'figure'
+        if (any(pattern.match(text) for pattern in self.table_captions)
+                and (before_table or not captions['require_following_table'])):
+            return 'table'
+        return None
 
     def add_cover(self, lines, index):
         text = lines[index][2:].strip()
@@ -327,8 +349,10 @@ class ReportBuilder:
         paragraph.paragraph_format.line_spacing = 1
         paragraph.add_run().add_picture(str(path), width=Cm(width))
 
-    def add_caption(self, text):
+    def add_caption(self, text, keep_with_next=False):
+        # 表题注写在表格上面，要跟着下面的表格走，否则容易被留在上一页页脚处。
         paragraph = self.document.add_paragraph(style='Caption')
+        paragraph.paragraph_format.keep_with_next = bool(keep_with_next)
         self.add_inline(paragraph, text)
 
     def add_reference(self, text):
@@ -439,7 +463,8 @@ class ReportBuilder:
                 while following < len(lines) and not lines[following].strip():
                     following += 1
                 has_caption = (following < len(lines)
-                               and any(p.match(lines[following].strip()) for p in self.caption_patterns))
+                               and any(p.match(lines[following].strip())
+                                       for p in self.figure_captions))
                 self.add_image(image.group(2), has_caption)
                 index += 1
                 continue
@@ -469,9 +494,10 @@ class ReportBuilder:
                 self.add_quote(stripped.lstrip('>').strip())
                 index += 1
                 continue
-            if self.is_caption(stripped):
+            kind = self.caption_kind(lines, index)
+            if kind:
                 self.flush(buffer)
-                self.add_caption(stripped)
+                self.add_caption(stripped, keep_with_next=(kind == 'table'))
                 index += 1
                 continue
             buffer.append(stripped)

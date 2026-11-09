@@ -68,9 +68,16 @@ DEFAULTS = {
         'subtitle_from_next_line': True,
     },
     'captions': {
-        'patterns': ['^图 \\d+-\\d+ ', '^表 \\d+-\\d+ '],
-        # True 表示题注只在紧跟在图片之后时才生效，避免正文里的“图 3-1”被误判。
+        # 图片题注写在图片下面，表格题注写在表格上面，所以两者分开配置。
+        'figure_patterns': ['^图 \\d+-\\d+ '],
+        'table_patterns': ['^表 \\d+-\\d+ '],
+        # 兼容旧配置：写在这里的规则图和表通用，会同时并进上面两个列表。
+        # 旧的默认值把「图」「表」两条都放在 patterns 里，照旧可用。
+        'patterns': [],
+        # True 表示图题注必须紧跟图片之后，避免正文里的「图 3-1」被误判。
         'require_preceding_image': True,
+        # True 表示表题注后面必须紧跟表格，避免正文里的「表 3-1」被误判。
+        'require_following_table': True,
     },
     'references': {
         'pattern': '^\\[\\d+\\] ',
