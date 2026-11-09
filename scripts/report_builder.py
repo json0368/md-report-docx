@@ -214,12 +214,20 @@ class ReportBuilder:
         self.add_inline(paragraph, text, True)
 
     def add_code_block(self, lines, index):
-        language = lines[index][3:].strip()
+        # 围栏可以带缩进：写在有序/无序列表项里的代码块，围栏和内容一起缩进若干个空格。
+        # 结束围栏同样带缩进，所以按 strip 后的结果判断围栏；内容按开启围栏的缩进量
+        # 整体去缩进，否则每一行都会多出一截空白。
+        fence = lines[index]
+        indent = len(fence) - len(fence.lstrip())
+        language = fence.strip()[3:].strip()
         self.code_languages.append(language)
         index += 1
-        while index < len(lines) and not lines[index].startswith('```'):
+        while index < len(lines) and not lines[index].strip().startswith('```'):
+            text = lines[index]
+            if indent and text[:indent].strip() == '':
+                text = text[indent:]
             paragraph = self.document.add_paragraph(style='Report Code')
-            run = paragraph.add_run(lines[index] or ' ')
+            run = paragraph.add_run(text or ' ')
             rs.set_run_fonts(run._element.get_or_add_rPr(), self.config,
                              mono=self.config['code']['font'] == 'mono')
             run.font.size = Pt(self.config['sizes']['code'])

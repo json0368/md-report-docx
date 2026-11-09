@@ -19,7 +19,7 @@ from pygments.util import ClassNotFound
 
 import report_style as rs
 
-FENCE_PATTERN = re.compile(r'^```([^\n]*)\n(.*?)^```', re.M | re.S)
+FENCE_PATTERN = re.compile(r'^([ \t]*)```([^\n]*)\n(.*?)^[ \t]*```', re.M | re.S)
 
 LEXER_ALIASES = {'sh': 'bash', 'shell': 'bash', 'text': 'text', 'plaintext': 'text'}
 
@@ -27,9 +27,29 @@ LEXER_ALIASES = {'sh': 'bash', 'shell': 'bash', 'text': 'text', 'plaintext': 'te
 SHELL_COMMANDS = {'mvn', 'npm', 'node', 'mysql', 'cd', 'java', 'git', 'docker'}
 
 
+def _dedent(body, indent):
+    """按开启围栏的缩进量整体去缩进。
+
+    要和 report_builder 写进文档的代码段落保持一致：那边按同样的缩进量去掉前缀，
+    这里若不去，分词结果的每行会多出前导空格，与段落文本对不上。
+    """
+    width = len(indent)
+    if not width:
+        return body
+    lines = []
+    for line in body.split('\n'):
+        lines.append(line[width:] if line[:width].strip() == '' else line)
+    return '\n'.join(lines)
+
+
 def fence_blocks(markdown_text):
-    """取出 Markdown 里所有代码围栏，返回 [(语言, 内容)]。"""
-    return [(language.strip(), body) for language, body in FENCE_PATTERN.findall(markdown_text)]
+    """取出 Markdown 里所有代码围栏，返回 [(语言, 内容)]。
+
+    围栏允许带缩进——写在列表项里的代码块，围栏与内容一起缩进；内容按开启围栏的
+    缩进量去缩进后再返回，与 report_builder 写进文档的代码段落逐行对应。
+    """
+    return [(language.strip(), _dedent(body, indent))
+            for indent, language, body in FENCE_PATTERN.findall(markdown_text)]
 
 
 def collect_code_paragraphs(document):
